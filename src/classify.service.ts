@@ -1,4 +1,11 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  InternalServerErrorException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import {
   ClassifyResponseError,
   ClassifyResponseSuccess,
@@ -13,14 +20,13 @@ export class ClassifyService {
     name: string,
   ): Promise<ClassifyResponseSuccess | ClassifyResponseError> {
     try {
+      this.validateQueryInput(name);
       const request = await fetch(`${this.apiUrl}?name=${name}`, {
         method: 'GET',
       });
       if (!request.ok)
-        throw new HttpException(
-          'Server error',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
+        throw new InternalServerErrorException('Upstream or server failure');
+
       const response = (await request.json()) as GenderizeResponse;
       if (!response.gender || !response.count)
         throw new HttpException(
@@ -30,7 +36,7 @@ export class ClassifyService {
       return {
         status: 'success',
         data: {
-          name,
+          name: response.name,
           gender: response.gender,
           probability: response.probability,
           sample_size: response.count,
@@ -39,11 +45,18 @@ export class ClassifyService {
         },
       };
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unexpected error';
-      return {
-        status: 'error',
-        message,
-      };
+      if (err instanceof HttpException) throw err;
+      throw new InternalServerErrorException('Upstream or server failure');
+    }
+  }
+
+  private validateQueryInput(input?: string) {
+    const trimmed = input?.trim();
+    if (!trimmed)
+      throw new BadRequestException('Missing or empty name parameter');
+
+    if (!/^[a-zA-Z]+$/.test(trimmed)) {
+      throw new UnprocessableEntityException('name is not a string');
     }
   }
 }
