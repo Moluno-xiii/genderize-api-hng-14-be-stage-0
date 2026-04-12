@@ -1,98 +1,151 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Genderize API Classifier
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+HNG 14 Backend Stage 0 project.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+This service accepts a name, queries the Genderize API, processes the upstream response, and returns a structured classification result.
 
-## Description
+## Features
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- `GET /api/classify?name={name}`
+- Calls Genderize using the `name` query parameter
+- Returns a normalized success response
+- Computes `is_confident` from `probability` and `sample_size`
+- Generates `processed_at` dynamically in UTC ISO 8601 format
+- Returns consistent JSON error responses
+- Enables CORS with `Access-Control-Allow-Origin: *`
 
-## Project setup
+## Tech Stack
 
-```bash
-$ pnpm install
+- [Nest JS](https://docs.nestjs.com/)
+- [TypeScript](https://www.typescriptlang.org/)
+- [PNPM](https://pnpm.io/)
+
+## API Endpoint
+
+### Classify Name
+
+`GET /api/classify?name={name}`
+
+Example:
+
+```http
+GET /api/classify?name=john
 ```
 
-## Compile and run the project
+## Success Response
 
-```bash
-# development
-$ pnpm run start
+Status: `200 OK`
 
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
+```json
+{
+  "status": "success",
+  "data": {
+    "name": "walter",
+    "gender": "male",
+    "probability": 1,
+    "sample_size": 348479,
+    "is_confident": true,
+    "processed_at": "2026-04-12T08:21:52.557Z"
+  }
+}
 ```
 
-## Run tests
+## Response Processing Rules
 
-```bash
-# unit tests
-$ pnpm run test
+- Extract `gender`, `probability`, and `count` from Genderize
+- Rename `count` to `sample_size`
+- Set `is_confident` to `true` only when:
+  - `probability >= 0.7`
+  - `sample_size >= 100`
+- Generate `processed_at` on every request using UTC ISO 8601 format
 
-# e2e tests
-$ pnpm run test:e2e
+## Error Responses
 
-# test coverage
-$ pnpm run test:cov
+All errors return this structure:
+
+```json
+{
+  "status": "error",
+  "message": "<error message>"
+}
 ```
 
-## Deployment
+Possible error cases:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+- `400 Bad Request` for missing or empty `name` query
+- `422 Unprocessable Entity` when `name` query is not a string
+- `500 Internal Server Error` for server failure
+- `502 Bad Gateway` for upstream API failure
+- `404 Not Found` for unknown routes
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+Edge case response:
 
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
+If Genderize returns `gender: null` or `count: 0`, the service returns a 422 error:
+
+```json
+{
+  "status": "error",
+  "message": "No prediction available for the provided name"
+}
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Environment Variables
 
-## Resources
+```env
+PORT=8000
+GENDERIZE_API_URL=https://api.genderize.io
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+## Local Setup
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+Clone the repository:
 
-## Support
+```bash
+git clone https://github.com/Moluno-xiii/genderize-api-hng-14-be-stage-0
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Enter the directory:
 
-## Stay in touch
+```bash
+cd genderize-api-hng-14-be-stage-0
+```
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+Install dependencies:
 
-## License
+```bash
+pnpm install
+```
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Run in development:
+
+```bash
+pnpm run start:dev
+```
+
+Run in production:
+
+```bash
+pnpm start
+```
+
+The server starts on:
+
+```text
+http://localhost:8000
+```
+
+## Testing the Endpoint
+
+Using curl:
+
+```bash
+curl "http://localhost:8000/api/classify?name=john"
+```
+
+Example error case:
+
+```bash
+curl "http://localhost:8000/api/classify"
+```
+
+## Built as a requirement for the HNG 14 stage 0 backend task
