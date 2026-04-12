@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   HttpException,
   HttpStatus,
@@ -25,7 +26,7 @@ export class ClassifyService {
         method: 'GET',
       });
       if (!request.ok)
-        throw new InternalServerErrorException('Upstream or server failure');
+        throw new BadGatewayException('Upstream or server failure');
 
       const response = (await request.json()) as GenderizeResponse;
       if (!response.gender || !response.count)
