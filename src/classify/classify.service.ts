@@ -11,7 +11,7 @@ import {
   ClassifyResponseError,
   ClassifyResponseSuccess,
   GenderizeResponse,
-} from './types';
+} from '../types';
 
 @Injectable()
 export class ClassifyService {
