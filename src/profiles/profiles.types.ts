@@ -1,3 +1,5 @@
+import { APISuccessResponse } from 'src/types';
+
 type AgeGroup = 'child' | 'teenager' | 'adult' | 'senior';
 
 type Profile = {
@@ -15,15 +17,7 @@ type Profile = {
 
 type CountryInfo = { country_id: string; probability: number };
 
-type CreateProfileSuccessResponse = {
-  status: 'success';
-  data: Profile;
-};
-
-type ProfileExistsResponse = {
-  message: string;
-  data: Profile;
-};
+type CreateProfileSuccessResponse = APISuccessResponse<Profile>;
 
 type AgifyAPIResponse = {
   count: number;
@@ -42,7 +36,6 @@ export type {
   Profile,
   CountryInfo,
   CreateProfileSuccessResponse,
-  ProfileExistsResponse,
   AgifyAPIResponse,
   NationalizeAPIResponse,
 };

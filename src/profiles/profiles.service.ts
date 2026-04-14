@@ -1,16 +1,20 @@
-import { Injectable, UnprocessableEntityException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GenderizeResponse } from 'src/types';
+import { APISuccessResponse, GenderizeResponse } from 'src/types';
 import { customTryCatch } from 'src/utils';
 import {
-  Profile,
-  CreateProfileSuccessResponse,
-  ProfileExistsResponse,
-  CountryInfo,
-  NationalizeAPIResponse,
-  AgifyAPIResponse,
   AgeGroup,
+  AgifyAPIResponse,
+  CountryInfo,
+  CreateProfileSuccessResponse,
+  NationalizeAPIResponse,
+  Profile,
 } from './profiles.types';
+import { ProfileFilterDTO } from './profiles.dto';
 
 @Injectable()
 class ProfilesService {
@@ -28,15 +32,14 @@ class ProfilesService {
       this.configService.getOrThrow<string>('GENDERIZE_API_URL');
   }
 
-  async getProfileInfo(
-    name: string,
-  ): Promise<CreateProfileSuccessResponse | ProfileExistsResponse> {
+  async getProfileInfo(name: string): Promise<CreateProfileSuccessResponse> {
     const transformedName = this.transformName(name);
-    const existingName = this.checkIfNameExists(transformedName);
-    if (existingName)
+    const existinProfile = this.checkIfNameExists(transformedName);
+    if (existinProfile)
       return {
+        status: 'success',
         message: 'Profile already exists',
-        data: existingName,
+        data: existinProfile,
       };
 
     const encodedName = encodeURIComponent(name);
@@ -56,16 +59,16 @@ class ProfilesService {
             : 'senior';
     const countryInfo: CountryInfo = nationalizeInfo.country[0];
     const data: Profile = {
+      id: crypto.randomUUID(),
+      name,
+      gender: genderizeInfo.gender!,
+      gender_probability: genderizeInfo.probability,
+      sample_size: genderizeInfo.count,
       age: agifyInfo.age,
       age_group,
       country_id: countryInfo.country_id,
       country_probability: countryInfo.probability,
       created_at: new Date().toISOString(),
-      gender: genderizeInfo.gender!,
-      gender_probability: genderizeInfo.probability,
-      id: crypto.randomUUID(),
-      name,
-      sample_size: genderizeInfo.count,
     };
     this.dummyDb.set(transformedName, { ...data, name: transformedName });
     return {
@@ -74,45 +77,75 @@ class ProfilesService {
     };
   }
 
-  async getNationalizeInfo(name: string): Promise<NationalizeAPIResponse> {
+  getProfileById(id: string): APISuccessResponse<Profile> {
+    const data: Profile | undefined = this.dummyDb.get(id);
+    if (!data) throw new NotFoundException('Profile not found');
+    return {
+      status: 'success',
+      data,
+    };
+  }
+
+  getAllProfiles(filters: ProfileFilterDTO): APISuccessResponse<Profile[]> {
+    let data = Array.from(this.dummyDb.values());
+
+    if (filters.gender) {
+      const gender = filters.gender.toLowerCase();
+      data = data.filter((p) => p.gender.toLowerCase() === gender);
+    }
+    if (filters.country_id) {
+      const countryId = filters.country_id.toUpperCase();
+      data = data.filter((p) => p.country_id.toUpperCase() === countryId);
+    }
+    if (filters.age_group) {
+      const ageGroup = filters.age_group.toLowerCase();
+      data = data.filter((p) => p.age_group === ageGroup);
+    }
+
+    return { status: 'success', count: data.length, data };
+  }
+
+  deleteSingleProfile(id: string) {
+    const profile: Profile | undefined = this.dummyDb.get(id);
+    if (!profile) throw new NotFoundException('Profile not found');
+    this.dummyDb.delete(id);
+  }
+
+  private async getNationalizeInfo(
+    name: string,
+  ): Promise<NationalizeAPIResponse> {
     const response = await customTryCatch<NationalizeAPIResponse>(
       `${this.nationalize_api_url}?name=${name}`,
       'GET',
     );
     if (response.country.length < 1)
-      throw new UnprocessableEntityException(
-        'No prediction available for the provided name',
-      );
+      throw new BadGatewayException('Nationalize returned an invalid response');
     return response;
   }
 
-  async getAgifyInfo(name: string): Promise<AgifyAPIResponse> {
+  private async getAgifyInfo(name: string): Promise<AgifyAPIResponse> {
     const response = await customTryCatch<AgifyAPIResponse>(
       `${this.agify_api_url}?name=${name}`,
       'GET',
     );
     if (!response.age)
-      throw new UnprocessableEntityException(
-        'No prediction available for the provided name',
-      );
+      throw new BadGatewayException('Agify returned an invalid response');
     return response;
   }
 
-  async getGenderizeInfo(name: string): Promise<GenderizeResponse> {
+  private async getGenderizeInfo(name: string): Promise<GenderizeResponse> {
     const response = await customTryCatch<GenderizeResponse>(
       `${this.genderize_api_url}?name=${name}`,
       'GET',
     );
     if (!response.gender || !response.count)
-      throw new UnprocessableEntityException(
-        'No prediction available for the provided name',
-      );
+      throw new BadGatewayException('Genderize returned an invalid response');
     return response;
   }
 
   private checkIfNameExists(name: string): Profile | undefined {
-    const existingName = this.dummyDb.get(name);
-    return existingName;
+    const existinProfile = this.dummyDb.get(name);
+    return existinProfile;
   }
 
   private transformName(name: string): string {

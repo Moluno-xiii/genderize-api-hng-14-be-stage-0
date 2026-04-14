@@ -25,6 +25,7 @@ const customTryCatch = async <T>(
     return response;
   } catch (err) {
     if (err instanceof HttpException) throw err;
+    console.log('some rror \n ', err);
     throw new InternalServerErrorException('Upstream or server failure');
   }
 };
