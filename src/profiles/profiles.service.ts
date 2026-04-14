@@ -1,8 +1,5 @@
-import {
-  BadRequestException,
-  Injectable,
-  UnprocessableEntityException,
-} from '@nestjs/common';
+import { Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { GenderizeResponse } from 'src/types';
 import { customTryCatch } from 'src/utils';
 import {
@@ -17,26 +14,37 @@ import {
 
 @Injectable()
 class ProfilesService {
-  private readonly nationalize_api_url: string =
-    process.env.NATIONALIZE_API_URL!;
-  private readonly agify_api_url: string = process.env.AGIFY_API_URL!;
-  private readonly genderize_api_url: string = process.env.GENDERIZE_API_URL!;
+  private readonly nationalize_api_url: string;
+  private readonly agify_api_url: string;
+  private readonly genderize_api_url: string;
   private dummyDb: Map<string, Profile> = new Map();
+
+  constructor(private configService: ConfigService) {
+    this.nationalize_api_url = this.configService.getOrThrow<string>(
+      'NATIONALIZE_API_URL',
+    );
+    this.agify_api_url = this.configService.getOrThrow<string>('AGIFY_API_URL');
+    this.genderize_api_url =
+      this.configService.getOrThrow<string>('GENDERIZE_API_URL');
+  }
 
   async getProfileInfo(
     name: string,
   ): Promise<CreateProfileSuccessResponse | ProfileExistsResponse> {
     const transformedName = this.transformName(name);
-    console.log('transformned name \n', transformedName);
     const existingName = this.checkIfNameExists(transformedName);
     if (existingName)
       return {
         message: 'Profile already exists',
         data: existingName,
       };
-    const nationalizeInfo = await this.getNationalizeInfo(name);
-    const agifyInfo = await this.getAgifyInfo(name);
-    const genderizeInfo = await this.getGenderizeInfo(name);
+
+    const encodedName = encodeURIComponent(name);
+    const [nationalizeInfo, agifyInfo, genderizeInfo] = await Promise.all([
+      this.getNationalizeInfo(encodedName),
+      this.getAgifyInfo(encodedName),
+      this.getGenderizeInfo(encodedName),
+    ]);
 
     const age_group: AgeGroup =
       agifyInfo.age < 13
@@ -102,19 +110,8 @@ class ProfilesService {
     return response;
   }
 
-  validateQueryInput(input?: string) {
-    const trimmed = input?.trim();
-    if (!trimmed)
-      throw new BadRequestException('Missing or empty name parameter');
-
-    if (!/^[a-zA-Z]+$/.test(trimmed)) {
-      throw new UnprocessableEntityException('name is not a string');
-    }
-  }
-
   private checkIfNameExists(name: string): Profile | undefined {
     const existingName = this.dummyDb.get(name);
-    console.log('does name exist\n', existingName);
     return existingName;
   }
 
