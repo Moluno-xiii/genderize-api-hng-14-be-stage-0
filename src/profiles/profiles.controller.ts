@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
@@ -9,9 +10,9 @@ import {
 } from '@nestjs/common';
 import ProfilesService from './profiles.service';
 import {
+  CreateProfileBodyDTO,
   DeleteSingleProfileDTO,
   ProfileFilterDTO,
-  ProfileQueryDTO,
 } from './profiles.dto';
 
 @Controller('api/profiles')
@@ -19,8 +20,8 @@ export class ProfilesController {
   constructor(private profilesService: ProfilesService) {}
 
   @Post()
-  createProfile(@Query() query: ProfileQueryDTO) {
-    return this.profilesService.getProfileInfo(query.name);
+  createProfile(@Body() body: CreateProfileBodyDTO) {
+    return this.profilesService.createNewProfile(body.name);
   }
 
   @Get()
