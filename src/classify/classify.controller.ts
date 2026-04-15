@@ -1,9 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ClassifyService } from './classify.service';
-
-type ClassifyQueryDTO = {
-  name: string;
-};
+import { ClassifyQueryDTO } from './classify.dto';
 
 @Controller('/api/classify')
 export class ClassifyController {
