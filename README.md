@@ -1,40 +1,23 @@
-# Genderize API Classifier
+# Genderize API — Profile Classifier
 
-HNG 14 Backend Stage 0 project.
+HNG 14 Backend Stage 0 + Stage 1 project.
 
-This service accepts a name, queries the Genderize API, processes the upstream response, and returns a structured classification result.
-
-## Features
-
-- `GET /api/classify?name={name}`
-- Calls Genderize using the `name` query parameter
-- Returns a normalized success response
-- Computes `is_confident` from `probability` and `sample_size`
-- Generates `processed_at` dynamically in UTC ISO 8601 format
-- Returns consistent JSON error responses
-- Enables CORS with `Access-Control-Allow-Origin: *`
+This service accepts a name, queries three external APIs (Genderize, Agify, Nationalize), applies classification logic, stores the result in a database, and exposes endpoints to manage that data.
 
 ## Tech Stack
 
-- [Nest JS](https://docs.nestjs.com/)
+- [NestJS](https://docs.nestjs.com/)
 - [TypeScript](https://www.typescriptlang.org/)
+- [Supabase](https://supabase.com/) (PostgreSQL)
 - [PNPM](https://pnpm.io/)
 
-## API Endpoint
+## API Endpoints
 
-### Classify Name
+### Stage 0 — Classify Name
 
 `GET /api/classify?name={name}`
 
-Example:
-
-```http
-GET /api/classify?name=john
-```
-
-## Success Response
-
-Status: `200 OK`
+Queries the Genderize API and returns a classification result.
 
 ```json
 {
@@ -50,18 +33,124 @@ Status: `200 OK`
 }
 ```
 
-## Response Processing Rules
+### Stage 1 — Profile CRUD
 
-- Extract `gender`, `probability`, and `count` from Genderize
-- Rename `count` to `sample_size`
-- Set `is_confident` to `true` only when:
-  - `probability >= 0.7`
-  - `sample_size >= 100`
-- Generate `processed_at` on every request using UTC ISO 8601 format
+#### Create Profile
+
+`POST /api/profiles`
+
+Request body:
+
+```json
+{ "name": "ella" }
+```
+
+Response (`201 Created`):
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "019eeb1a-4b2c-7df0-a3c1-9f0b8e5d6a12",
+    "name": "ella",
+    "gender": "female",
+    "gender_probability": 0.99,
+    "sample_size": 1234,
+    "age": 46,
+    "age_group": "adult",
+    "country_id": "DRC",
+    "country_probability": 0.85,
+    "created_at": "2026-04-14T12:00:00.000Z"
+  }
+}
+```
+
+If the same name is submitted again, the existing profile is returned:
+
+```json
+{
+  "status": "success",
+  "message": "Profile already exists",
+  "data": { "...existing profile..." }
+}
+```
+
+#### Get Single Profile
+
+`GET /api/profiles/{id}`
+
+Response (`200 OK`):
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "019eeb1a-4b2c-7df0-a3c1-9f0b8e5d6a12",
+    "name": "emmanuel",
+    "gender": "male",
+    "gender_probability": 0.99,
+    "sample_size": 1234,
+    "age": 25,
+    "age_group": "adult",
+    "country_id": "NG",
+    "country_probability": 0.85,
+    "created_at": "2026-04-14T12:00:00.000Z"
+  }
+}
+```
+
+#### Get All Profiles
+
+`GET /api/profiles`
+
+Optional query parameters (case-insensitive): `gender`, `country_id`, `age_group`
+
+Example: `/api/profiles?gender=male&country_id=NG`
+
+Response (`200 OK`):
+
+```json
+{
+  "status": "success",
+  "count": 2,
+  "data": [
+    {
+      "id": "019eeb1a-4b2c-7df0-a3c1-9f0b8e5d6a12",
+      "name": "emmanuel",
+      "gender": "male",
+      "age": 25,
+      "age_group": "adult",
+      "country_id": "NG"
+    },
+    {
+      "id": "019eeb1a-5a3d-7ef1-b4d2-0a1c9f6e7b23",
+      "name": "sarah",
+      "gender": "female",
+      "age": 28,
+      "age_group": "adult",
+      "country_id": "US"
+    }
+  ]
+}
+```
+
+#### Delete Profile
+
+`DELETE /api/profiles/{id}`
+
+Returns `204 No Content` on success.
+
+## Classification Rules
+
+- **Gender and probability**: from Genderize API. `count` is renamed to `sample_size`
+- **Age group** from Agify API: 0-12 child, 13-19 teenager, 20-59 adult, 60+ senior
+- **Nationality**: highest-probability country from Nationalize API
+- **IDs**: UUID v7 (time-sortable)
+- **Timestamps**: UTC ISO 8601
 
 ## Error Responses
 
-All errors return this structure:
+All errors follow this structure:
 
 ```json
 {
@@ -70,30 +159,29 @@ All errors return this structure:
 }
 ```
 
-Possible error cases:
+| Status | Condition |
+|---|---|
+| `400 Bad Request` | Missing or empty name |
+| `404 Not Found` | Profile not found |
+| `422 Unprocessable Entity` | Invalid type |
+| `500 Internal Server Error` | Server failure |
+| `502 Bad Gateway` | Upstream API returned invalid data |
 
-- `400 Bad Request` for missing or empty `name` query
-- `422 Unprocessable Entity` when `name` query is not a string
-- `500 Internal Server Error` for server failure
-- `502 Bad Gateway` for upstream API failure
-- `404 Not Found` for unknown routes
+Edge cases that return `502`:
 
-Edge case response:
-
-If Genderize returns `gender: null` or `count: 0`, the service returns a 422 error:
-
-```json
-{
-  "status": "error",
-  "message": "No prediction available for the provided name"
-}
-```
+- Genderize returns `gender: null` or `count: 0`
+- Agify returns `age: null`
+- Nationalize returns no country data
 
 ## Environment Variables
 
 ```env
 PORT=8000
 GENDERIZE_API_URL=https://api.genderize.io
+AGIFY_API_URL=https://api.agify.io
+NATIONALIZE_API_URL=https://api.nationalize.io
+SUPABASE_URL=<your-supabase-url>
+SUPABASE_KEY=<your-supabase-service-role-key>
 ```
 
 ## Local Setup
@@ -101,13 +189,13 @@ GENDERIZE_API_URL=https://api.genderize.io
 Clone the repository:
 
 ```bash
-git clone https://github.com/Moluno-xiii/genderize-api-hng-14-be-stage-0
+git clone https://github.com/Moluno-xiii/genderize-api-hng-14-be-stage-1
 ```
 
 Enter the directory:
 
 ```bash
-cd genderize-api-hng-14-be-stage-0
+cd genderize-api-hng-14-be-stage-1
 ```
 
 Install dependencies:
@@ -115,6 +203,8 @@ Install dependencies:
 ```bash
 pnpm install
 ```
+
+Create a `.env` file with the variables listed above.
 
 Run in development:
 
@@ -134,18 +224,26 @@ The server starts on:
 http://localhost:8000
 ```
 
-## Testing the Endpoint
-
-Using curl:
+## Testing
 
 ```bash
+# Create a profile
+curl -X POST http://localhost:8000/api/profiles -H "Content-Type: application/json" -d '{"name": "john"}'
+
+# Get all profiles
+curl http://localhost:8000/api/profiles
+
+# Get all profiles filtered
+curl "http://localhost:8000/api/profiles?gender=male&country_id=NG"
+
+# Get single profile
+curl http://localhost:8000/api/profiles/{id}
+
+# Delete profile
+curl -X DELETE http://localhost:8000/api/profiles/{id}
+
+# Classify name (Stage 0)
 curl "http://localhost:8000/api/classify?name=john"
 ```
 
-Example error case:
-
-```bash
-curl "http://localhost:8000/api/classify"
-```
-
-## Built as a requirement for the HNG 14 stage 0 backend task
+## Built as a requirement for the HNG 14 Backend Stage 0 and Stage 1 tasks

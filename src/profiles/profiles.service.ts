@@ -5,8 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import Supabase from 'src/supabase/supabase';
 import { APISuccessResponse, GenderizeResponse } from 'src/types';
 import { customTryCatch } from 'src/utils';
+import { ProfileFilterDTO } from './profiles.dto';
 import {
   AgeGroup,
   AgifyAPIResponse,
@@ -15,8 +17,6 @@ import {
   NationalizeAPIResponse,
   Profile,
 } from './profiles.types';
-import { ProfileFilterDTO } from './profiles.dto';
-import Supabase from 'src/supabase/supabase';
 
 @Injectable()
 class ProfilesService {
@@ -52,14 +52,7 @@ class ProfilesService {
       this.getGenderizeInfo(encodedName),
     ]);
 
-    const age_group: AgeGroup =
-      agifyInfo.age < 13
-        ? 'child'
-        : agifyInfo.age < 19
-          ? 'teenager'
-          : agifyInfo.age < 60
-            ? 'adult'
-            : 'senior';
+    const age_group: AgeGroup = this.getAgeGroup(agifyInfo.age);
     const countryInfo: CountryInfo = nationalizeInfo.country[0];
 
     try {
@@ -80,8 +73,7 @@ class ProfilesService {
         data,
       };
     } catch (err) {
-      if (err instanceof Error)
-        throw new Error(err.message, { cause: err.cause });
+      if (err instanceof Error) throw new BadGatewayException(err.message);
       throw new InternalServerErrorException('Failed to save profile');
     }
   }
@@ -156,6 +148,16 @@ class ProfilesService {
     if (!response.gender || !response.count)
       throw new BadGatewayException('Genderize returned an invalid response');
     return response;
+  }
+
+  private getAgeGroup(age: number): AgeGroup {
+    return age < 13
+      ? 'child'
+      : age < 20
+        ? 'teenager'
+        : age < 60
+          ? 'adult'
+          : 'senior';
   }
 }
 
