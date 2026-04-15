@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -15,13 +16,14 @@ import {
   Profile,
 } from './profiles.types';
 import { ProfileFilterDTO } from './profiles.dto';
+import Supabase from 'src/supabase/supabase';
 
 @Injectable()
 class ProfilesService {
   private readonly nationalize_api_url: string;
   private readonly agify_api_url: string;
   private readonly genderize_api_url: string;
-  private dummyDb: Map<string, Profile> = new Map();
+  private db = new Supabase();
 
   constructor(private configService: ConfigService) {
     this.nationalize_api_url = this.configService.getOrThrow<string>(
@@ -32,14 +34,15 @@ class ProfilesService {
       this.configService.getOrThrow<string>('GENDERIZE_API_URL');
   }
 
-  async getProfileInfo(name: string): Promise<CreateProfileSuccessResponse> {
-    const transformedName = this.transformName(name);
-    const existinProfile = this.checkIfNameExists(transformedName);
-    if (existinProfile)
+  async createNewProfile(name: string): Promise<CreateProfileSuccessResponse> {
+    const transformedName = name.trim().toLowerCase();
+
+    const existingProfile = await this.db.getProfileByName(transformedName);
+    if (existingProfile)
       return {
         status: 'success',
         message: 'Profile already exists',
-        data: existinProfile,
+        data: existingProfile,
       };
 
     const encodedName = encodeURIComponent(name);
@@ -58,27 +61,33 @@ class ProfilesService {
             ? 'adult'
             : 'senior';
     const countryInfo: CountryInfo = nationalizeInfo.country[0];
-    const data: Profile = {
-      id: crypto.randomUUID(),
-      name,
-      gender: genderizeInfo.gender!,
-      gender_probability: genderizeInfo.probability,
-      sample_size: genderizeInfo.count,
-      age: agifyInfo.age,
-      age_group,
-      country_id: countryInfo.country_id,
-      country_probability: countryInfo.probability,
-      created_at: new Date().toISOString(),
-    };
-    this.dummyDb.set(transformedName, { ...data, name: transformedName });
-    return {
-      status: 'success',
-      data,
-    };
+
+    try {
+      const data = await this.db.createProfile({
+        name: transformedName,
+        gender: genderizeInfo.gender!,
+        gender_probability: genderizeInfo.probability,
+        sample_size: genderizeInfo.count,
+        age: agifyInfo.age,
+        age_group,
+        country_id: countryInfo.country_id,
+        country_probability: countryInfo.probability,
+        created_at: new Date().toISOString(),
+      });
+
+      return {
+        status: 'success',
+        data,
+      };
+    } catch (err) {
+      if (err instanceof Error)
+        throw new Error(err.message, { cause: err.cause });
+      throw new InternalServerErrorException('Failed to save profile');
+    }
   }
 
-  getProfileById(id: string): APISuccessResponse<Profile> {
-    const data: Profile | undefined = this.dummyDb.get(id);
+  async getProfileById(id: string): Promise<APISuccessResponse<Profile>> {
+    const data = await this.db.getProfileById(id);
     if (!data) throw new NotFoundException('Profile not found');
     return {
       status: 'success',
@@ -86,29 +95,35 @@ class ProfilesService {
     };
   }
 
-  getAllProfiles(filters: ProfileFilterDTO): APISuccessResponse<Profile[]> {
-    let data = Array.from(this.dummyDb.values());
+  async getAllProfiles(
+    filters: ProfileFilterDTO,
+  ): Promise<
+    APISuccessResponse<
+      Pick<
+        Profile,
+        'id' | 'name' | 'gender' | 'age' | 'age_group' | 'country_id'
+      >[]
+    >
+  > {
+    const data = await this.db.getAllProfiles(filters);
 
-    if (filters.gender) {
-      const gender = filters.gender.toLowerCase();
-      data = data.filter((p) => p.gender.toLowerCase() === gender);
-    }
-    if (filters.country_id) {
-      const countryId = filters.country_id.toUpperCase();
-      data = data.filter((p) => p.country_id.toUpperCase() === countryId);
-    }
-    if (filters.age_group) {
-      const ageGroup = filters.age_group.toLowerCase();
-      data = data.filter((p) => p.age_group === ageGroup);
-    }
+    const trimmed = data.map(
+      ({ id, name, gender, age, age_group, country_id }) => ({
+        id,
+        name,
+        gender,
+        age,
+        age_group,
+        country_id,
+      }),
+    );
 
-    return { status: 'success', count: data.length, data };
+    return { status: 'success', count: trimmed.length, data: trimmed };
   }
 
-  deleteSingleProfile(id: string) {
-    const profile: Profile | undefined = this.dummyDb.get(id);
-    if (!profile) throw new NotFoundException('Profile not found');
-    this.dummyDb.delete(id);
+  async deleteSingleProfile(id: string): Promise<void> {
+    const deleted = await this.db.deleteProfile(id);
+    if (!deleted) throw new NotFoundException('Profile not found');
   }
 
   private async getNationalizeInfo(
@@ -141,15 +156,6 @@ class ProfilesService {
     if (!response.gender || !response.count)
       throw new BadGatewayException('Genderize returned an invalid response');
     return response;
-  }
-
-  private checkIfNameExists(name: string): Profile | undefined {
-    const existinProfile = this.dummyDb.get(name);
-    return existinProfile;
-  }
-
-  private transformName(name: string): string {
-    return name.trim().toLowerCase();
   }
 }
 

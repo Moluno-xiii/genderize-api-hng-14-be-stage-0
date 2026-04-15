@@ -1,6 +1,12 @@
-import { IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+} from 'class-validator';
 
-class ProfileQueryDTO {
+class CreateProfileBodyDTO {
   @Matches(/^[a-zA-ZÀ-ÖØ-öø-ÿ' -]+$/, {
     message: 'name is not a string',
   })
@@ -10,7 +16,7 @@ class ProfileQueryDTO {
 }
 
 class DeleteSingleProfileDTO {
-  // @IsUUID(undefined, { message: 'Invalid profile ID' })
+  @IsUUID(undefined, { message: 'Invalid profile ID' })
   @IsNotEmpty({ message: 'Missing or empty id' })
   @IsString({ message: 'id must be a string' })
   id!: string;
@@ -30,4 +36,4 @@ class ProfileFilterDTO {
   age_group?: string;
 }
 
-export { ProfileQueryDTO, DeleteSingleProfileDTO, ProfileFilterDTO };
+export { CreateProfileBodyDTO, DeleteSingleProfileDTO, ProfileFilterDTO };
