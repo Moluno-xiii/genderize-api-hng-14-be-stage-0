@@ -94,8 +94,7 @@ class ProfilesService {
   async getAllProfiles(
     filters: ProfileFilterDTO,
   ): Promise<PaginatedProfilesResponse> {
-    const page = filters.page ?? 1;
-    const limit = filters.limit ?? 10;
+    const { page, limit } = this.clampPagination(filters.page, filters.limit);
 
     const { data, total } = await this.db.getAllProfiles({
       ...filters,
@@ -120,8 +119,7 @@ class ProfilesService {
       throw new BadRequestException('Unable to interpret query');
     }
 
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
+    const { page, limit } = this.clampPagination(query.page, query.limit);
 
     const { data, total } = await this.db.getAllProfiles({
       ...parsed,
@@ -136,6 +134,15 @@ class ProfilesService {
       total,
       data,
     };
+  }
+
+  private clampPagination(
+    rawPage?: number,
+    rawLimit?: number,
+  ): { page: number; limit: number } {
+    const page = Math.max(1, Math.floor(rawPage ?? 1));
+    const limit = Math.max(1, Math.min(50, Math.floor(rawLimit ?? 10)));
+    return { page, limit };
   }
 
   async deleteSingleProfile(id: string): Promise<void> {

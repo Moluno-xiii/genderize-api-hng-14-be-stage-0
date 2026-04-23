@@ -79,14 +79,11 @@ class ProfileFilterDTO {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
   page?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
-  @Max(50)
   limit?: number;
 }
 
@@ -98,14 +95,11 @@ class SearchQueryDTO {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
   page?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
-  @Max(50)
   limit?: number;
 }
 
