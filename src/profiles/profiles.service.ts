@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -8,13 +9,16 @@ import { ConfigService } from '@nestjs/config';
 import Supabase from 'src/supabase/supabase';
 import { APISuccessResponse, GenderizeResponse } from 'src/types';
 import { customTryCatch } from 'src/utils';
-import { ProfileFilterDTO } from './profiles.dto';
+import { getCountryName } from './countries';
+import { parseNaturalQuery } from './nlQuery';
+import { ProfileFilterDTO, SearchQueryDTO } from './profiles.dto';
 import {
   AgeGroup,
   AgifyAPIResponse,
   CountryInfo,
   CreateProfileSuccessResponse,
   NationalizeAPIResponse,
+  PaginatedProfilesResponse,
   Profile,
 } from './profiles.types';
 
@@ -60,10 +64,10 @@ class ProfilesService {
         name: transformedName,
         gender: genderizeInfo.gender!,
         gender_probability: genderizeInfo.probability,
-        sample_size: genderizeInfo.count,
         age: agifyInfo.age,
         age_group,
         country_id: countryInfo.country_id,
+        country_name: getCountryName(countryInfo.country_id),
         country_probability: countryInfo.probability,
         created_at: new Date().toISOString(),
       });
@@ -89,28 +93,49 @@ class ProfilesService {
 
   async getAllProfiles(
     filters: ProfileFilterDTO,
-  ): Promise<
-    APISuccessResponse<
-      Pick<
-        Profile,
-        'id' | 'name' | 'gender' | 'age' | 'age_group' | 'country_id'
-      >[]
-    >
-  > {
-    const data = await this.db.getAllProfiles(filters);
+  ): Promise<PaginatedProfilesResponse> {
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 10;
 
-    const trimmed = data.map(
-      ({ id, name, gender, age, age_group, country_id }) => ({
-        id,
-        name,
-        gender,
-        age,
-        age_group,
-        country_id,
-      }),
-    );
+    const { data, total } = await this.db.getAllProfiles({
+      ...filters,
+      page,
+      limit,
+    });
 
-    return { status: 'success', count: trimmed.length, data: trimmed };
+    return {
+      status: 'success',
+      page,
+      limit,
+      total,
+      data,
+    };
+  }
+
+  async searchProfiles(
+    query: SearchQueryDTO,
+  ): Promise<PaginatedProfilesResponse> {
+    const parsed = parseNaturalQuery(query.q);
+    if (!parsed) {
+      throw new BadRequestException('Unable to interpret query');
+    }
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+
+    const { data, total } = await this.db.getAllProfiles({
+      ...parsed,
+      page,
+      limit,
+    });
+
+    return {
+      status: 'success',
+      page,
+      limit,
+      total,
+      data,
+    };
   }
 
   async deleteSingleProfile(id: string): Promise<void> {

@@ -13,6 +13,7 @@ import {
   CreateProfileBodyDTO,
   DeleteSingleProfileDTO,
   ProfileFilterDTO,
+  SearchQueryDTO,
 } from './profiles.dto';
 
 @Controller('api/profiles')
@@ -27,6 +28,11 @@ export class ProfilesController {
   @Get()
   getAllProfiles(@Query() query: ProfileFilterDTO) {
     return this.profilesService.getAllProfiles(query);
+  }
+
+  @Get('search')
+  searchProfiles(@Query() query: SearchQueryDTO) {
+    return this.profilesService.searchProfiles(query);
   }
 
   @Get(':id')

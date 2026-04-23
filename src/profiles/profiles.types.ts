@@ -7,10 +7,10 @@ type Profile = {
   name: string;
   gender: string;
   gender_probability: number;
-  sample_size: number;
   age: number;
   age_group: AgeGroup;
   country_id: string;
+  country_name: string;
   country_probability: number;
   created_at: string;
 };
@@ -31,6 +31,22 @@ type NationalizeAPIResponse = {
   country: Array<CountryInfo>;
 };
 
+type ParsedSearchFilters = {
+  gender?: 'male' | 'female';
+  age_group?: AgeGroup;
+  country_id?: string;
+  min_age?: number;
+  max_age?: number;
+};
+
+type PaginatedProfilesResponse = {
+  status: 'success';
+  page: number;
+  limit: number;
+  total: number;
+  data: Profile[];
+};
+
 export type {
   AgeGroup,
   Profile,
@@ -38,4 +54,6 @@ export type {
   CreateProfileSuccessResponse,
   AgifyAPIResponse,
   NationalizeAPIResponse,
+  ParsedSearchFilters,
+  PaginatedProfilesResponse,
 };
